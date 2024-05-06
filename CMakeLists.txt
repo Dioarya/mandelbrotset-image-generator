@@ -7,5 +7,5 @@ file(GLOB_RECURSE sources src/*.cpp src/*.c src/*.hpp src/*.h)
 add_executable(MIG ${sources})
 target_compile_options(MIG PRIVATE
   $<$<CXX_COMPILER_ID:MSVC>:>
-  $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Ofast -march=native>
+  $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Ofast -march=native -mavx512f>
 )
