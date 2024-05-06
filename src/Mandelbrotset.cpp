@@ -7,7 +7,7 @@
 extern MandelbrotsetConfiguration mandelbrotsetConfiguration;
 MandelbrotsetConfiguration &config = mandelbrotsetConfiguration;
 
-__m512d _mm512_fmod_pd(__m512d a, __m512d b) noexcept {
+__m512d fmod(__m512d a, __m512d b) {
     return _mm512_sub_pd(a, _mm512_mul_pd(_mm512_div_round_pd(a, b, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC), b));
 }
 
@@ -53,7 +53,7 @@ void computeIterationsVector(uint64_t x, uint64_t y, Sample outSamples[8]) noexc
         m_zReal2 = _mm512_mul_pd(m_zReal, m_zReal);
         m_zImag2 = _mm512_mul_pd(m_zImag, m_zImag);
 
-        __mmask8 m_savePeriod = m_iterating & _mm512_cmp_pd_mask(_mm512_fmod_pd(_mm512_sub_pd(m_k, _mm512_set1_pd(1)), m_periodicitySavePeriod), _mm512_set1_pd(0), _CMP_EQ_OS);
+        __mmask8 m_savePeriod = m_iterating & _mm512_cmp_pd_mask(fmod(_mm512_sub_pd(m_k, _mm512_set1_pd(1)), m_periodicitySavePeriod), _mm512_set1_pd(0), _CMP_EQ_OS);
                  m_oReal = _mm512_mask_blend_pd(m_savePeriod, m_oReal, m_zReal);
                  m_oImag = _mm512_mask_blend_pd(m_savePeriod, m_oImag, m_zImag);
         __m512d  m_magnitude2 = _mm512_add_pd(m_zReal2, m_zImag2);
