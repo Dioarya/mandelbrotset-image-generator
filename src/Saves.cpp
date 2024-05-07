@@ -21,14 +21,14 @@ extern std::filesystem::path savePath;
 
 // Returns whether or not a valid configuration file exists within savePath/save.mtc.
 bool detectConfiguration() {
-    std::filesystem::path configurationFilepath = savePath.append("save.mtc");
+    std::filesystem::path configurationFilepath = savePath / "save.mtc";
     if (!std::filesystem::exists(configurationFilepath)) return false;
     std::ifstream configurationFile(configurationFilepath, std::ios::binary);
     if (!configurationFile) return false; // TODO: Add error to logs
     const char headerSize = 2 + sizeof(MandelbrotsetConfiguration);
     char header[headerSize + 1];  // Extra character for null character.
     if (configurationFile.read(header, 2).gcount() != 2) return false;
-    if (header != "TC") return false;
+    if (!(header[0] == 'T' && header[1] == 'C')) return false;
     if (configurationFile.read(header + 2, headerSize - 2).gcount() != headerSize - 2) return false;
 
     configurationFile.close();
@@ -40,8 +40,8 @@ bool detectConfiguration() {
 // There is no checking whether the variables are clean or not, just direct memory access (DANGEROUS)
 // This is not portable because save files from different systems might have different endianness.
 void loadConfiguration() {
-    std::ifstream configurationFile(savePath.append("save.mtc"), std::ios::binary);
-    configurationFile.read(nullptr, 2);  // Discard TC header
+    std::ifstream configurationFile(savePath / "save.mtc", std::ios::binary);
+    configurationFile.seekg(2);  // Skip TC header
     configurationFile.read((char*)&mandelbrotsetConfiguration, sizeof(mandelbrotsetConfiguration));
     configurationFile.close();
 
@@ -51,7 +51,7 @@ void loadConfiguration() {
 // Saves the current state of computation, i.e. mandelbrotsetConfiguration directly into the file.
 // This is not portable because save files from different systems might have different endianness.
 void saveConfiguration() {
-    std::ofstream configurationFile(savePath.append("save.mtc"), std::ios::binary);
+    std::ofstream configurationFile(savePath / "save.mtc", std::ios::binary);
     configurationFile.write("TC", 2);
     configurationFile.write((char*)&mandelbrotsetConfiguration, sizeof(mandelbrotsetConfiguration));
     configurationFile.close();

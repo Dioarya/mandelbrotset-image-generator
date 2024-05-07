@@ -27,7 +27,7 @@ void computeIterationsVector(uint64_t x, uint64_t y, Sample outSamples[8]) noexc
     const __m512d m_periodicitySavePeriod = _mm512_set1_pd(config.periodicitySavePeriod);
 
     // Position vectors
-    __m512d m_x =  _mm512_set_pd(x + 0, x + 1, x + 2, x + 3, x + 4, x + 5, x + 6, x + 7);
+    __m512d m_x =  _mm512_set_pd(x + 7, x + 6, x + 5, x + 4, x + 3, x + 2, x + 1, x + 0); // Vectors read from right to left when converted to native types
     __m512d m_y = _mm512_set1_pd(                           y                          );
 
     // Input variables
@@ -36,8 +36,8 @@ void computeIterationsVector(uint64_t x, uint64_t y, Sample outSamples[8]) noexc
     __m512d m_cImag = _mm512_add_pd(_mm512_mul_pd(_mm512_sub_pd(_mm512_set1_pd(1), _mm512_div_pd(m_y, m_screenHeight)), m_startImag), _mm512_mul_pd(_mm512_div_pd(m_y, m_screenHeight), m_endImag));
 
     // Initialization variables
-    __m512d m_zReal = _mm512_set1_pd(0);
-    __m512d m_zImag = _mm512_set1_pd(0);
+    __m512d m_zReal = m_cReal;
+    __m512d m_zImag = m_cImag;
     __m512d m_zReal2 = _mm512_set1_pd(0);
     __m512d m_zImag2 = _mm512_set1_pd(0);
     __m512d m_finalMagnitude2 = _mm512_set1_pd(0);
@@ -48,14 +48,17 @@ void computeIterationsVector(uint64_t x, uint64_t y, Sample outSamples[8]) noexc
     // Compute for pixels (x + 0, y), (x + 1, y), (x + 2, y), (x + 3, y), (x + 4, y), (x + 5, y), (x + 6, y), (x + 7, y)
     __mmask8 m_iterating = 0b11111111;
 
-    __m512d m_k = _mm512_set1_pd(0);
-    for (long long k = 0; k <= config.maxIterations; k++) {
+    __m512d m_k = _mm512_set1_pd(1);
+    for (long long k = 1; k < config.maxIterations; k++) {
         m_zReal2 = _mm512_mul_pd(m_zReal, m_zReal);
         m_zImag2 = _mm512_mul_pd(m_zImag, m_zImag);
 
-        __mmask8 m_savePeriod = m_iterating & _mm512_cmp_pd_mask(fmod(_mm512_sub_pd(m_k, _mm512_set1_pd(1)), m_periodicitySavePeriod), _mm512_set1_pd(0), _CMP_EQ_OS);
-                 m_oReal = _mm512_mask_blend_pd(m_savePeriod, m_oReal, m_zReal);
-                 m_oImag = _mm512_mask_blend_pd(m_savePeriod, m_oImag, m_zImag);
+        if (mandelbrotsetConfiguration.periodicitySavePeriod > 0) {
+            __mmask8 m_savePeriod = m_iterating & _mm512_cmplt_pd_mask(fmod(_mm512_sub_pd(m_k, _mm512_set1_pd(1)), m_periodicitySavePeriod), _mm512_set1_pd(0));
+                     m_oReal = _mm512_mask_blend_pd(m_savePeriod, m_oReal, m_zReal);
+                     m_oImag = _mm512_mask_blend_pd(m_savePeriod, m_oImag, m_zImag);
+        }
+
         __m512d  m_magnitude2 = _mm512_add_pd(m_zReal2, m_zImag2);
                  m_finalMagnitude2 = _mm512_mask_blend_pd(m_iterating, m_finalMagnitude2, m_magnitude2);
         __mmask8 m_mask = _mm512_cmplt_pd_mask(m_magnitude2, m_bailoutRadius);
@@ -67,19 +70,22 @@ void computeIterationsVector(uint64_t x, uint64_t y, Sample outSamples[8]) noexc
         // Iterate
         // z_(n+1) = z ^ 2 + c
         // z_(n+1).i = (2 * z.r * z.i) + c.i = (z.r + z.r) * z.i + c.i
-        // z_(n+1).r = (z.r * z.r - z.i * z.i) + c.r
-        m_zImag = _mm512_maskz_fmadd_pd(m_iterating, _mm512_add_pd(m_zReal, m_zReal), m_zImag, m_cImag);
-        m_zReal = _mm512_maskz_add_pd(m_iterating, _mm512_sub_pd(m_zReal2, m_zImag2), m_cReal);
+        // z_(n+1).r = (z.r + z.i) * (z.r - z.i) + c.r
+        __m512d m_zImagNew = _mm512_maskz_fmadd_pd(m_iterating, _mm512_add_pd(m_zReal, m_zReal), m_zImag, m_cImag);
+        m_zReal = _mm512_maskz_fmadd_pd(m_iterating, _mm512_add_pd(m_zReal, m_zImag), _mm512_sub_pd(m_zReal, m_zImag), m_cReal);
+        m_zImag = m_zImagNew;
 
-        __m512d m_pReal    = _mm512_sub_pd(m_zReal, m_oReal),
-                m_pImag    = _mm512_sub_pd(m_zImag, m_oImag),
-                m_error    = _mm512_add_pd(_mm512_mul_pd(m_pReal, m_pReal), _mm512_mul_pd(m_pImag, m_pImag));
-        __mmask8 m_inPeriod = _mm512_cmplt_pd_mask(m_error, m_periodicityPrecision2);
+        if (mandelbrotsetConfiguration.periodicitySavePeriod > 0) {
+            __m512d m_pReal    = _mm512_sub_pd(m_zReal, m_oReal),
+                    m_pImag    = _mm512_sub_pd(m_zImag, m_oImag),
+                    m_error    = _mm512_add_pd(_mm512_mul_pd(m_pReal, m_pReal), _mm512_mul_pd(m_pImag, m_pImag));
+            __mmask8 m_inPeriod = _mm512_cmplt_pd_mask(m_error, m_periodicityPrecision2);
 
-        // Setting m_k to maxIter when in a period
-        m_k = _mm512_mask_blend_pd(m_inPeriod & m_iterating, m_k, m_maxIterations);
-        // Set iterating to false when in a period
-        m_iterating = m_iterating & ~m_inPeriod;
+            // Setting m_k to maxIter when in a period
+            m_k = _mm512_mask_blend_pd(m_inPeriod & m_iterating, m_k, m_maxIterations);
+            // Set iterating to false when in a period
+            m_iterating = m_iterating & ~m_inPeriod;
+        }
 
         // Iterating m_k
         m_k = _mm512_mask_blend_pd(m_iterating, m_k, _mm512_add_pd(m_k, _mm512_set1_pd(1)));

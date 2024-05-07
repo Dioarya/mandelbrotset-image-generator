@@ -23,7 +23,7 @@ struct MandelbrotsetConfiguration {
     uint64_t periodicitySavePeriod;
 };
 
-// TODO: Add struct for current computation progress (current tile, current tile thread completion)
+// TODO: Add struct for current computation progress (data for tiles, current tile, current tile thread completion... and more probably)
 
 // Returns whether or not a save was detected within savePath
 bool detectConfiguration();
