@@ -1,11 +1,14 @@
 #include "Mandelbrotset.hpp"
 
-#include "Saves.hpp"
 #include <immintrin.h>
-#include <cstdint>
 
-extern MandelbrotsetConfiguration mandelbrotsetConfiguration;
-MandelbrotsetConfiguration &config = mandelbrotsetConfiguration;
+#include <cstdint>
+#include <filesystem>
+
+#include "Saves.hpp"
+
+extern MandelbrotsetConfiguration mConfig;
+extern TileConfiguration tConfig;
 
 __m512d fmod(__m512d a, __m512d b) {
     return _mm512_sub_pd(a, _mm512_mul_pd(_mm512_div_round_pd(a, b, _MM_FROUND_TO_ZERO | _MM_FROUND_NO_EXC), b));
@@ -15,16 +18,16 @@ __m512d fmod(__m512d a, __m512d b) {
 // x and y and image coordinates
 void computeIterationsVector(uint64_t x, uint64_t y, Sample outSamples[8]) noexcept {
     // TODO: Might be a little too much overhead because of reinstating these variables when they could be constant and outside the function
-    const __m512d m_startReal = _mm512_set1_pd(config.startReal);
-    const __m512d m_endReal = _mm512_set1_pd(config.endReal);
-    const __m512d m_startImag = _mm512_set1_pd(config.startImag);
-    const __m512d m_endImag = _mm512_set1_pd(config.endImag);
-    const __m512d m_screenWidth = _mm512_set1_pd(config.imageWidth - 1);
-    const __m512d m_screenHeight = _mm512_set1_pd(config.imageHeight - 1);
-    const __m512d m_maxIterations = _mm512_set1_pd(config.maxIterations);
-    const __m512d m_bailoutRadius = _mm512_set1_pd(config.bailoutRadius);
-    const __m512d m_periodicityPrecision2 = _mm512_set1_pd(config.periodicityPrecision2);
-    const __m512d m_periodicitySavePeriod = _mm512_set1_pd(config.periodicitySavePeriod);
+    const __m512d m_startReal = _mm512_set1_pd(mConfig.startReal);
+    const __m512d m_endReal = _mm512_set1_pd(mConfig.endReal);
+    const __m512d m_startImag = _mm512_set1_pd(mConfig.startImag);
+    const __m512d m_endImag = _mm512_set1_pd(mConfig.endImag);
+    const __m512d m_imageWidth = _mm512_set1_pd(tConfig.imageWidth - 1);
+    const __m512d m_imageHeight = _mm512_set1_pd(tConfig.imageHeight - 1);
+    const __m512d m_maxIterations = _mm512_set1_pd(mConfig.maxIterations);
+    const __m512d m_bailoutRadius = _mm512_set1_pd(mConfig.bailoutRadius);
+    const __m512d m_periodicityPrecision2 = _mm512_set1_pd(mConfig.periodicityPrecision2);
+    const __m512d m_periodicitySavePeriod = _mm512_set1_pd(mConfig.periodicitySavePeriod);
 
     // Position vectors
     __m512d m_x =  _mm512_set_pd(x + 7, x + 6, x + 5, x + 4, x + 3, x + 2, x + 1, x + 0); // Vectors read from right to left when converted to native types
@@ -32,8 +35,8 @@ void computeIterationsVector(uint64_t x, uint64_t y, Sample outSamples[8]) noexc
 
     // Input variables
     // ((1 - (x / m)) * a) + ((x / m) * b)
-    __m512d m_cReal = _mm512_add_pd(_mm512_mul_pd(_mm512_sub_pd(_mm512_set1_pd(1), _mm512_div_pd(m_x, m_screenWidth)), m_startReal), _mm512_mul_pd(_mm512_div_pd(m_x, m_screenWidth), m_endReal));
-    __m512d m_cImag = _mm512_add_pd(_mm512_mul_pd(_mm512_sub_pd(_mm512_set1_pd(1), _mm512_div_pd(m_y, m_screenHeight)), m_startImag), _mm512_mul_pd(_mm512_div_pd(m_y, m_screenHeight), m_endImag));
+    __m512d m_cReal = _mm512_add_pd(_mm512_mul_pd(_mm512_sub_pd(_mm512_set1_pd(1), _mm512_div_pd(m_x, m_imageWidth)), m_startReal), _mm512_mul_pd(_mm512_div_pd(m_x, m_imageWidth), m_endReal));
+    __m512d m_cImag = _mm512_add_pd(_mm512_mul_pd(_mm512_sub_pd(_mm512_set1_pd(1), _mm512_div_pd(m_y, m_imageHeight)), m_startImag), _mm512_mul_pd(_mm512_div_pd(m_y, m_imageHeight), m_endImag));
 
     // Initialization variables
     __m512d m_zReal = m_cReal;
@@ -49,11 +52,11 @@ void computeIterationsVector(uint64_t x, uint64_t y, Sample outSamples[8]) noexc
     __mmask8 m_iterating = 0b11111111;
 
     __m512d m_k = _mm512_set1_pd(1);
-    for (long long k = 1; k < config.maxIterations; k++) {
+    for (long long k = 1; k < mConfig.maxIterations; k++) {
         m_zReal2 = _mm512_mul_pd(m_zReal, m_zReal);
         m_zImag2 = _mm512_mul_pd(m_zImag, m_zImag);
 
-        if (mandelbrotsetConfiguration.periodicitySavePeriod > 0) {
+        if (mConfig.periodicitySavePeriod > 0) {
             __mmask8 m_savePeriod = m_iterating & _mm512_cmplt_pd_mask(fmod(_mm512_sub_pd(m_k, _mm512_set1_pd(1)), m_periodicitySavePeriod), _mm512_set1_pd(0));
                      m_oReal = _mm512_mask_blend_pd(m_savePeriod, m_oReal, m_zReal);
                      m_oImag = _mm512_mask_blend_pd(m_savePeriod, m_oImag, m_zImag);
@@ -75,7 +78,7 @@ void computeIterationsVector(uint64_t x, uint64_t y, Sample outSamples[8]) noexc
         m_zReal = _mm512_maskz_fmadd_pd(m_iterating, _mm512_add_pd(m_zReal, m_zImag), _mm512_sub_pd(m_zReal, m_zImag), m_cReal);
         m_zImag = m_zImagNew;
 
-        if (mandelbrotsetConfiguration.periodicitySavePeriod > 0) {
+        if (mConfig.periodicitySavePeriod > 0) {
             __m512d m_pReal    = _mm512_sub_pd(m_zReal, m_oReal),
                     m_pImag    = _mm512_sub_pd(m_zImag, m_oImag),
                     m_error    = _mm512_add_pd(_mm512_mul_pd(m_pReal, m_pReal), _mm512_mul_pd(m_pImag, m_pImag));
@@ -92,10 +95,10 @@ void computeIterationsVector(uint64_t x, uint64_t y, Sample outSamples[8]) noexc
     }
     __m512i m_iterations = _mm512_cvtpd_epi64(m_k);
 
-    double *cReal = (double*)&m_cReal;
-    double *cImag = (double*)&m_cImag;
-    long long *iteration = (long long*)&m_iterations;
-    double *finalMagnitude2 = (double*)&m_finalMagnitude2;
+    double *cReal = reinterpret_cast<double*>(&m_cReal);
+    double *cImag = reinterpret_cast<double*>(&m_cImag);
+    long long *iteration = reinterpret_cast<long long*>(&m_iterations);
+    double *finalMagnitude2 = reinterpret_cast<double*>(&m_finalMagnitude2);
     for (int i = 0; i < 8; i++) {
         Sample &sample = outSamples[i];
         sample.cReal = cReal[i];

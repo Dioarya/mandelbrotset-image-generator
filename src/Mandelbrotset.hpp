@@ -1,3 +1,5 @@
+#ifndef MANDELBROTSET_HPP_INCLUDED
+#define MANDELBROTSET_HPP_INCLUDED
 #include <cstdint>
 
 // Represents the final data after the mandelbrot iteration at a single point.
@@ -10,3 +12,5 @@ struct Sample {
 
 // Takes in x and y as image pixels and outputs them in samples output array
 void computeIterationsVector(uint64_t x, uint64_t y, Sample outSamples[8]) noexcept;
+
+#endif  // MANDELBROTSET_HPP_INCLUDED
