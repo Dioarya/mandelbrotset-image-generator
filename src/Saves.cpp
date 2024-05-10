@@ -5,6 +5,51 @@
 #include <filesystem>
 #include <fstream>
 
+// Returns the absolute range of real part of values within this image
+double MandelbrotsetConfiguration::realRange() const noexcept {
+    return abs(endReal - startReal);
+}
+
+// Returns the absolute range of imaginary part of values within this image
+double MandelbrotsetConfiguration::imagRange() const noexcept {
+    return abs(endImag - startImag);
+}
+
+// Returns the width of a tile in pixels
+uint64_t TileConfiguration::tileWidth() const noexcept {
+    return imageWidth / tileGridWidth;
+}
+
+// Returns the height of a tile in pixels
+uint64_t TileConfiguration::tileHeight() const noexcept {
+    return imageHeight / tileGridHeight;
+}
+
+// Returns the width of a thread tile in pixels
+uint64_t TileConfiguration::threadWidth() const noexcept {
+    return tileWidth() / threadGridWidth;
+}
+
+// Index of a tile within an image from tileX and tileY
+uint64_t TileConfiguration::tileIndex(const uint64_t tileX, const uint64_t tileY) const noexcept {
+    return tileY * tileGridWidth + tileX;
+}
+
+// Index of a thread tile within a tile from threadX and threadY
+uint64_t TileConfiguration::threadIndex(const uint64_t threadX, const uint64_t threadY) const noexcept {
+    return threadY * threadGridWidth + threadX;
+}
+
+// Returns the height of a thread tile in pixels
+uint64_t TileConfiguration::threadHeight() const noexcept {
+    return tileHeight() / threadGridHeight;
+}
+
+ProgressConfiguration::~ProgressConfiguration() {
+    delete[] tileCompletion;
+    delete[] threadCompletion;
+}
+
 extern MandelbrotsetConfiguration mConfig;
 extern TileConfiguration tConfig;
 extern ProgressConfiguration pConfig;
@@ -26,9 +71,9 @@ inline ConfigurationType getConfigurationType(std::filesystem::path filepath) {
         return Tile;
     } else if (strncmp(buffer, "PC", 2) == 0) {
         return Progress;
+    } else {
+        return Null;
     }
-
-    return Null;
 }
 
 // Returns whether or not filepath is a valid configuration based on type.
@@ -40,10 +85,10 @@ bool detectConfiguration(std::filesystem::path filepath, ConfigurationType type)
 
     char configurationHeader[3];
     switch (type) {
-        case Mandelbrotset: {strncpy(configurationHeader, "MC", 2);} break;
-        case Tile:          {strncpy(configurationHeader, "TC", 2);} break;
-        case Progress:      {strncpy(configurationHeader, "PC", 2);} break;
-        default: {return false;}
+        case Mandelbrotset: {strncpy(configurationHeader, "MC", 3);} break;
+        case Tile:          {strncpy(configurationHeader, "TC", 3);} break;
+        case Progress:      {strncpy(configurationHeader, "PC", 3);} break;
+        case Null: {return false;}
     }
     char headerData[3];
     if (configurationFile.read(headerData, 2).gcount() != 2) return false;
@@ -51,20 +96,20 @@ bool detectConfiguration(std::filesystem::path filepath, ConfigurationType type)
 
     switch (type) {
         case Mandelbrotset: {
-            uint64_t objectSize = sizeof(MandelbrotsetConfiguration);
+            constexpr size_t objectSize = sizeof(MandelbrotsetConfiguration);
             char objectData[objectSize];
             if (configurationFile.read(objectData, objectSize).gcount() != objectSize) return false;
-            break;
+            return true;
         }
         case Tile: {
-            uint64_t objectSize = sizeof(TileConfiguration);
+            constexpr size_t objectSize = sizeof(TileConfiguration);
             char objectData[objectSize];
             if (configurationFile.read(objectData, objectSize).gcount() != objectSize) return false;
-            break;
+            return true;
         }
         case Progress: {
-            uint64_t currentTile;
-            configurationFile.read(reinterpret_cast<char*>(&currentTile), sizeof(currentTile));
+            // Skip first few variables
+            configurationFile.seekg(sizeof(ProgressConfiguration) - (sizeof(uint64_t) * 2 + sizeof(size_t) * 2), std::ios_base::cur);
             uint64_t tileCount;
             configurationFile.read(reinterpret_cast<char*>(&tileCount), sizeof(tileCount));
             uint64_t threadCount;
@@ -76,13 +121,11 @@ bool detectConfiguration(std::filesystem::path filepath, ConfigurationType type)
             configurationFile.seekg((threadCount + 7) / 8, std::ios_base::cur);
             configurationFile.peek();
             if (!configurationFile) return false; // Ditto
-            break;
+            return true;
         }
-        default:
+        case Null:
             return false;
     }
-
-    return true;
 }
 
 // Loads filepath into the corresponding configuration variable based on type.
@@ -92,7 +135,7 @@ void loadConfiguration(std::filesystem::path filepath, ConfigurationType type) {
     std::ifstream configurationFile(filepath, std::ios::binary);
     if (!configurationFile) throw std::system_error(errno, std::generic_category(), filepath.string());
 
-    configurationFile.seekg(2);  // Skip 2 byte header.
+    configurationFile.seekg(2, std::ios_base::cur);  // Skip 2 byte header.
     switch (type) {
         case Mandelbrotset: {
             configurationFile.read(reinterpret_cast<char*>(&mConfig), sizeof(MandelbrotsetConfiguration));
@@ -117,6 +160,8 @@ void loadConfiguration(std::filesystem::path filepath, ConfigurationType type) {
             pConfig.threadCompletion = reinterpret_cast<unsigned char*>(buffer);
             return;
         }
+        case Null:
+            break;
     }
 }
 
@@ -148,5 +193,7 @@ void saveConfiguration(std::filesystem::path filepath, ConfigurationType type) {
             configurationFile.write(reinterpret_cast<char*>(pConfig.tileCompletion), (pConfig.tileCount + 7) / 8);
             configurationFile.write(reinterpret_cast<char*>(pConfig.threadCompletion), (pConfig.threadCount + 7) / 8);
             return;
+        case Null:
+            break;
     }
 }

@@ -2,12 +2,14 @@
 #define MANDELBROTSET_HPP_INCLUDED
 #include <cstdint>
 
-// Represents the final data after the mandelbrot iteration at a single point.
+// Minimum amount of information to uniquely represent a pixel
 struct Sample {
     double cReal;
     double cImag;
-    int iterations = 0;
-    double finalMagnitude2 = 0;
+    int64_t iterations;
+    double finalMagnitude2;
+
+    Sample() : cReal(0), cImag(0), iterations(0), finalMagnitude2(0) {}
 };
 
 // Takes in x and y as image pixels and outputs them in samples output array

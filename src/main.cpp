@@ -1,6 +1,5 @@
 #include <chrono>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 
 #include "Mandelbrotset.hpp"
@@ -12,7 +11,7 @@ MandelbrotsetConfiguration mConfig = {
     .startImag = 1.25L,
     .endImag = -1.25L,
 
-    .maxIterations = 1000ULL,
+    .maxIterations = 1000LL,
     .bailoutRadius = 1 << 8,
     .periodicityPrecision2 = 1E-14L,
     .periodicitySavePeriod = 200
@@ -28,6 +27,7 @@ TileConfiguration tConfig = {
     .threadGridHeight = 72ULL
 };
 ProgressConfiguration pConfig = {
+    .threadsUsed = 8ULL,
     .currentTile = 0ULL,
     .tileCount = tConfig.tileGridWidth * tConfig.tileGridHeight,
     .threadCount = tConfig.threadGridWidth * tConfig.threadGridHeight,
@@ -42,6 +42,14 @@ int main() {
     std::cout << "endReal: " << mConfig.endReal << std::endl;
     std::cout << "startImag: " << mConfig.startImag << std::endl;
     std::cout << "endImag: " << mConfig.endImag << std::endl;
+
+    saveConfiguration(savePath / "save.mc", Mandelbrotset);
+    saveConfiguration(savePath / "save.mtc", Tile);
+    saveConfiguration(savePath / "save.mpc", Progress);
+
+    detectLoadConfiguration(savePath / "save.mc");
+    detectLoadConfiguration(savePath / "save.mtc");
+    detectLoadConfiguration(savePath / "save.mpc");
 
     Sample samples[8];
     computeIterationsVector(1920 / 2, 1080 / 2, samples);
